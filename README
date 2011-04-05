@@ -1,0 +1,10 @@
+This is a (portable) and free driver for the Microchip MRF24J40 radio chip. It
+currently only has a hardware layer for PIC18, but others will soon follow.
+
+Writing your own HAL is easy enough; you only need to provide the I/O pin
+functions for the CS' and RESET, the SPI routines to read and write and finally
+a delay routine that delays at least 1 ms.
+
+The driver is distributed under an MIT-style license. Work is in progress,
+there is plenty of stuff still missing.
+
