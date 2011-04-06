@@ -152,6 +152,23 @@ unsigned char mrf24j40_read_channel(void)
 	return (11 + (SPI_READ_LONG(RFCON0) >> 4));
 }
 
+void mrf24j40_set_promiscuous(int crc_check)
+{
+	unsigned char w;
+
+	/*
+	 * Set promiscuous mode, disable auto-ACK and, if requested,
+	 * accept packets with a CRC error.
+	 */
+	w = NOACKRSP;
+	if (!crc_check)
+		w |= ERRPKT;
+	else
+		w |= PROMI;
+
+	SPI_WRITE_SHORT(RXMCR, w);
+}
+
 void mrf24j40_set_pan(int pan)
 {
 	SPI_WRITE_SHORT(PANIDH, pan>>8);
@@ -187,6 +204,7 @@ void mrf24j40_init(int ch)
 
 	SPI_WRITE_SHORT(BBREG2, CCAMODE(0x03) | CCASTH(0x02));
 	SPI_WRITE_SHORT(CCAEDTH, 0x60);
+
 	/* Enable interrupts */
 	mrf24j40_ie();
 
@@ -233,30 +251,32 @@ int mrf24j40_txpkt_intcb(void)
 	unsigned char stat = SPI_READ_SHORT(TXSTAT);
 	if (stat & TXNSTAT) {
 		if (stat & CCAFAIL)
-			return -2;
+			return EBUSY;
 		else
-			return -1;
+			return EIO;
 	} else {
 		return 0;
 	}
 }
 
-int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi)
+int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi, unsigned char *prssi)
 {
 	int flen, i;
 	int addr = RXFIFO;
 	unsigned char lqi, rssi;
 
+	/* Disable receiving more packets */
 	SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) | RXDECINV);
 
 	flen = SPI_READ_LONG(addr++);
 	if (flen > len) {
+		/* Re-enable packet reception */
 		SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) & ~RXDECINV);
-		return -3;
+		return ENOMEM;
 	}
 
-	/* XXX: skip header */
-	for (i = 0; i < flen; i++) {
+	d[0] = flen;
+	for (i = 1; i <= flen; i++) {
 		d[i] = SPI_READ_LONG(addr++);
 	}
 
@@ -266,24 +286,31 @@ int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi)
 	if (plqi != (void *)0)
 		*plqi = lqi;
 
+	if (prssi != (void *)0)
+		*prssi = rssi;
 
+	/* Re-enable packet reception */
 	SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) & ~RXDECINV);
 	return 0;
 }
 
-void mrf24j40_int_tasks(void) {
+int mrf24j40_int_tasks(void) {
 	unsigned char stat;
+	int ret = 0;
 
 	stat = SPI_READ_SHORT(INTSTAT);
 
 	if (stat & RXIF) {
-		//mrf24j40_rxpkt_intcb(...);
+		ret |= MRF24J40_INT_RX;
 	}
 
 	if (stat & TXNIF) {
-		//mrf24j40_txpkt_intcb(...);
+		ret |= MRF24J40_INT_TX;
 	}
 
 	if (stat & SECIF) {
+		ret |= MRF24J40_INT_SEC;
 	}
+
+	return ret;
 }

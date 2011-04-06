@@ -20,6 +20,15 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
+/* Return values */
+#define MRF24J40_INT_RX		0x01
+#define MRF24J40_INT_TX		0x02
+#define MRF24J40_INT_SEC	0x04
+
+#define EIO			5
+#define ENOMEM			12
+#define EBUSY			16
+
 /* Short Address Control Register Map */
 #define RXMCR		0x00
 #define PANIDL		0x01
@@ -286,8 +295,14 @@ void mrf24j40_init(int ch);
 void mrf24j40_set_short_addr(int addr);
 void mrf24j40_set_pan(int pan);
 void mrf24j40_set_channel(int ch);
+void mrf24j40_set_promiscuous(int crc_check);
 void mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int len);
 unsigned char mrf24j40_read_channel(void);
+int mrf24j40_int_tasks(void);
+int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi,
+    unsigned char *prssi);
+int mrf24j40_txpkt_intcb(void);
+
 
 /*
 Some info about the (likely) content of the "reserved" registers:
