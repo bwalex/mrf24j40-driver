@@ -291,6 +291,10 @@
 #define SLPCLKDIV(x)	((x & 0x1F))
 
 
+/* Partial reception flags */
+#define MRF24J40_PART_RX_ABORT	(1 << 1)
+#define MRF24J40_PART_RX_FIRST	(1)
+
 void mrf24j40_init(int ch);
 void mrf24j40_set_short_addr(int addr);
 void mrf24j40_set_pan(int pan);
@@ -301,6 +305,8 @@ unsigned char mrf24j40_read_channel(void);
 int mrf24j40_int_tasks(void);
 int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi,
     unsigned char *prssi);
+int mrf24j40_rxpkt_part_intcb(unsigned char *d, int len, int flags,
+	unsigned char *plqi, unsigned char *prssi);
 int mrf24j40_txpkt_intcb(void);
 
 

@@ -106,7 +106,11 @@ static void SPI_READ_FIFO(int addr, unsigned char *d, int len)
 
 void mrf24j40_ie(void)
 {
-	SPI_WRITE_SHORT(INTCON, TXNIE | RXIE | SECIE);
+	/*
+	 * Very intuitively IE (interrupt enable) set to 1
+	 * causes the interrupt to be disabled...
+	 */
+	SPI_WRITE_SHORT(INTCON, ~(TXNIE | RXIE | SECIE));
 }
 
 void mrf24j40_pwr_reset(void)
@@ -205,6 +209,9 @@ void mrf24j40_init(int ch)
 	SPI_WRITE_SHORT(BBREG2, CCAMODE(0x03) | CCASTH(0x02));
 	SPI_WRITE_SHORT(CCAEDTH, 0x60);
 
+	/* Flush RX FIFO */
+	SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+
 	/* Enable interrupts */
 	mrf24j40_ie();
 
@@ -289,9 +296,71 @@ int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi, unsigne
 	if (prssi != (void *)0)
 		*prssi = rssi;
 
+	/* Flush RX FIFO */
+	SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+
 	/* Re-enable packet reception */
 	SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) & ~RXDECINV);
 	return 0;
+}
+
+int mrf24j40_rxpkt_part_intcb(unsigned char *d, int len, int flags, unsigned char *plqi, unsigned char *prssi)
+{
+	int i;
+	static int flen;
+	static int addr;
+	unsigned char lqi, rssi;
+
+	/* Abort; flush and re-enable reception */
+	if (flags & MRF24J40_PART_RX_ABORT) {
+		/* Flush RX FIFO */
+		SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+
+		/* Re-enable packet reception */
+		SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) & ~RXDECINV);
+		return -1;
+	}
+
+	if (flags & MRF24J40_PART_RX_FIRST) {
+		/* Disable receiving more packets */
+		SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) | RXDECINV);
+
+		addr = RXFIFO;
+		flen = SPI_READ_LONG(addr++);
+
+		/* Account for frame len */
+		--len;
+		*d++ = flen;
+	}
+
+	if (flen < len)
+		len = flen;
+
+	for (i = 0; i < len; i++) {
+		d[i] = SPI_READ_LONG(addr++);
+	}
+
+	/* Adjust remaining frame length */
+	flen -= len;
+
+	if (flen == 0) {
+		lqi = SPI_READ_LONG(addr++);
+		rssi = SPI_READ_LONG(addr++);
+
+		if (plqi != (void *)0)
+			*plqi = lqi;
+
+		if (prssi != (void *)0)
+			*prssi = rssi;
+
+		/* Flush RX FIFO */
+		SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+
+		/* Re-enable packet reception */
+		SPI_WRITE_SHORT(BBREG1, SPI_READ_SHORT(BBREG1) & ~RXDECINV);
+	}
+
+	return flen;
 }
 
 int mrf24j40_int_tasks(void) {
