@@ -249,6 +249,47 @@ mrf24j40_init(int ch)
 }
 
 void
+mrf24j40_sleep(int spi_wake)
+{
+	unsigned char r;
+
+	/* Enable immediate wakeup */
+	SPI_WRITE_SHORT(WAKECON, IMMWAKE);
+
+	r = SPI_READ_SHORT(SLPACK);
+
+	/*
+	 * If we are using pin wakeup instead of spi wakeup, set up the
+	 * wake pin
+	 */
+	if(!spi_wake) {
+		WAKE_LOW();
+	
+		/* Enable WAKE pin, and set polarity to active high */
+		SPI_WRITE_SHORT(RXFLUSH, SPI_READ_SHORT(RXFLUSH) |
+		    WAKEPAD | WAKEPOL);
+	}
+
+	mrf24j40_pwr_reset();
+	SPI_WRITE_SHORT(SLPACK, r | _SLPACK);
+}
+
+void
+mrf24j40_wakeup(int spi_wake)
+{
+	if (spi_wake) {
+		/* Wake up on register by setting and then clearing REGWAKE */
+		SPI_WRITE_SHORT(WAKECON, REGWAKE);
+		SPI_WRITE_SHORT(WAKECON, 0);
+	} else {
+		/* Wake up by asserting the wake pin */
+		WAKE_HIGH();
+	}
+
+	mrf24j40_rf_reset();
+}
+
+void
 mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len)
 {
 	int addr = TXNFIFO;

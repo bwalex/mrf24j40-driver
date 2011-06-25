@@ -28,6 +28,9 @@
 #define RESET_HIGH()	(PORTCbits.RC6 = 1)
 #define RESET_LOW()	(PORTCbits.RC6 = 0)
 
+#define WAKE_HIGH()	(PORTBbits.RB4 = 1)
+#define WAKE_LOW()	(PORTBbits.RB4 = 0)
+
 #define DELAY_1MS	delay_1ms
 
 void spi_write(unsigned char v);

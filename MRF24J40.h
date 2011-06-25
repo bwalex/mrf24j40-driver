@@ -24,6 +24,7 @@
 #define MRF24J40_INT_RX		0x01
 #define MRF24J40_INT_TX		0x02
 #define MRF24J40_INT_SEC	0x04
+#define MRF24J40_INT_SLP	0x08
 
 #define EIO			5
 #define ENOMEM			12
@@ -106,6 +107,9 @@
 #define RSSI		0x210
 #define SLPCON0		0x211
 #define SLPCON1		0x220
+
+#define WAKETIMEL	0x222
+#define WAKETIMEH	0x223
 
 #define MAINCNT0	0x226
 #define MAINCNT1	0x227
@@ -227,9 +231,10 @@
 
 /* SLPACK */
 #define _SLPACK		(1<<7)
+#define WAKECNT_L(x)	(x & 0x03F)
 
 /* RFCTL */
-#define WAKECNT(x)	((x & 0x03) << 3)
+#define WAKECNT_H(x)	((x & 0x03) << 3)
 #define RFRST		(1<<2)
 #define RFTXMODE	(1<<1)
 #define RFRXMODE	(1)
@@ -278,6 +283,8 @@
 
 /* RFCON 7 */
 #define SLPCLKSEL(x)	((x & 0x03) << 6)
+#define SLPCLKSEL_100k	(SLPCLKSEL(0x02))
+#define SLPCLKSEL_32k	(SLPCLKSEL(0x01))
 
 /* RFCON8 */
 #define RFVCO		(1 << 4)
@@ -288,7 +295,7 @@
 
 /* SLPCON1 */
 #define CLKOUTDIS	(1 << 5)	/* CLKOUTEN' */
-#define SLPCLKDIV(x)	((x & 0x1F))
+#define SLPCLKDIV(x)	((x & 0x1F))	/* division ratio: 2^(SLPCLKDIV) */
 
 
 /* Partial reception flags */
@@ -297,6 +304,8 @@
 
 void mrf24j40_rxfifo_flush(void);
 void mrf24j40_init(int ch);
+void mrf24j40_sleep(int spi_wake);
+void mrf24j40_wakeup(int spi_wake);
 void mrf24j40_set_short_addr(int addr);
 void mrf24j40_set_pan(int pan);
 void mrf24j40_set_channel(int ch);
