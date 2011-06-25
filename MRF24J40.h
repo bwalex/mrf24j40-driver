@@ -295,11 +295,13 @@
 #define MRF24J40_PART_RX_ABORT	(1 << 1)
 #define MRF24J40_PART_RX_FIRST	(1)
 
+void mrf24j40_rxfifo_flush(void);
 void mrf24j40_init(int ch);
 void mrf24j40_set_short_addr(int addr);
 void mrf24j40_set_pan(int pan);
 void mrf24j40_set_channel(int ch);
 void mrf24j40_set_promiscuous(int crc_check);
+void mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len);
 void mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int len);
 unsigned char mrf24j40_read_channel(void);
 int mrf24j40_int_tasks(void);
