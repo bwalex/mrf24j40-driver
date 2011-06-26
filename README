@@ -8,3 +8,9 @@ a delay routine that delays at least 1 ms.
 The driver is distributed under an MIT-style license. Work is in progress,
 there is plenty of stuff still missing.
 
+
+NOTE: The driver has a large number of so far untested features. I will be
+testing it more thoroughly over the coming weeks. It is also missing proper
+documentation and examples, which I also plan to add over the next few
+weeks. If you intend to use it meanwhile, please feel free to ask me if you
+get stuck trying to use it.
