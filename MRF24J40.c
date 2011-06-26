@@ -25,6 +25,7 @@
 #include "ieee802154.h"
 
 static unsigned char seq_no = 0;
+static int internal_state = 0;
 
 static unsigned char
 SPI_READ_LONG(int addr)
@@ -136,6 +137,7 @@ void
 mrf24j40_mac_reset(void)
 {
 	/* NOTE: All control registers are reset by this! */
+	internal_state = 0;
 	SPI_WRITE_SHORT(SOFTRST, RSTMAC);
 }
 
@@ -170,7 +172,7 @@ mrf24j40_set_channel(int ch)
 }
 
 unsigned char
-mrf24j40_read_channel(void)
+mrf24j40_get_channel(void)
 {
 	return (11 + (SPI_READ_LONG(RFCON0) >> 4));
 }
@@ -200,6 +202,12 @@ mrf24j40_set_coordinator(void)
 }
 
 void
+mrf24j40_clear_coordinator(void)
+{
+	SPI_WRITE_SHORT(RXMCR, SPI_READ_SHORT(RXMCR) & ~PANCOORD);
+}
+
+void
 mrf24j40_set_pan(int pan)
 {
 	SPI_WRITE_SHORT(PANIDH, pan>>8);
@@ -218,6 +226,7 @@ mrf24j40_init(int ch)
 {
 	RESET_LOW();
 
+	internal_state = 0;
 	DELAY_1MS();
 
 	RESET_HIGH();
@@ -270,7 +279,7 @@ mrf24j40_sleep(int spi_wake)
 	 */
 	if(!spi_wake) {
 		WAKE_LOW();
-	
+
 		/* Enable WAKE pin, and set polarity to active high */
 		SPI_WRITE_SHORT(RXFLUSH, SPI_READ_SHORT(RXFLUSH) |
 		    WAKEPAD | WAKEPOL);
@@ -296,9 +305,47 @@ mrf24j40_wakeup(int spi_wake)
 }
 
 void
-mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len)
+mrf24j40_set_encdec(int types, int mode, unsigned char *key, int klen)
 {
+	unsigned char *keyp;
+	unsigned char w;
+	int addr;
+	int len;
+
+	w = SPI_READ_SHORT(SECCON0);
+
+	if (types & MRF24J40_TX_KEY) {
+		addr = SECKTXNFIFO;
+		len = klen;
+		keyp = key;
+
+		while (len-- > 0)
+			SPI_WRITE_LONG(addr++, *keyp++);
+
+		w |= TXNCIPHER(mode);
+		SPI_WRITE_SHORT(SECCON0, w);
+	}
+
+	if (types & MRF24J40_RX_KEY) {
+		addr = SECKRXFIFO;
+		len = klen;
+		keyp = key;
+
+		while (len-- > 0)
+			SPI_WRITE_LONG(addr++, *keyp++);
+
+		w |= RXCIPHER(mode);
+		SPI_WRITE_SHORT(SECCON0, w);
+	}
+}
+
+void
+mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len, int enc)
+{
+	unsigned char w;
 	int addr = TXNFIFO;
+
+	internal_state = 0;
 
 	/* Request ACK */
 	SPI_WRITE_SHORT(TXNCON, SPI_READ_SHORT(TXNCON) | TXNACKREQ);
@@ -311,8 +358,27 @@ mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len)
 	while (frame_len-- > 0)
 		SPI_WRITE_LONG(addr++, *frame++);
 
+	w = SPI_READ_SHORT(TXNCON);
+	w &= ~(TXNSECEN);
+
+	if (enc)
+		w |= TXNSECEN;
+
 	/* Trigger transmission */
-	SPI_WRITE_SHORT(TXNCON, SPI_READ_SHORT(TXNCON) | TXNTRIG);
+	SPI_WRITE_SHORT(TXNCON, w | TXNTRIG);
+}
+
+void
+mrf24j40_txpkt_trigger(void)
+{
+	unsigned char w;
+
+	internal_state = 0;
+
+	w = SPI_READ_SHORT(TXNCON);
+	w &= ~(TXNSECEN);
+
+	SPI_WRITE_SHORT(TXNCON, w | TXNTRIG);
 }
 
 /*
@@ -325,13 +391,16 @@ mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len)
  *
  */
 void
-mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int payload_len)
+mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int payload_len, int enc)
 {
 	struct ieee802_15_4_MAChdr	pkt_header;
+	unsigned char w;
 	int hlen = 0;
 	int flen = 0;
 	int addr = TXNFIFO;
 	int i;
+
+	internal_state = 0;
 
 	hlen = sizeof(pkt_header);
 	flen += hlen;
@@ -365,8 +434,12 @@ mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int payload_len)
 		SPI_WRITE_LONG(addr++, pkt[i]);
 	}
 
+	w = SPI_READ_SHORT(TXNCON);
+	if (enc)
+		w |= TXNSECEN;
+
 	/* Trigger transmission */
-	SPI_WRITE_SHORT(TXNCON, SPI_READ_SHORT(TXNCON) | TXNTRIG);
+	SPI_WRITE_SHORT(TXNCON, w | TXNTRIG);
 }
 
 int
@@ -381,6 +454,35 @@ mrf24j40_txpkt_intcb(void)
 	} else {
 		return 0;
 	}
+}
+
+int
+mrf24j40_sec_intcb(int accept)
+{
+	unsigned char w;
+
+	w = SPI_READ_SHORT(SECCON0);
+	w &= ~(SECSTART | SECIGNORE);
+
+	if (accept) {
+		SPI_WRITE_SHORT(SECCON0, w | SECSTART);
+	} else {
+		SPI_WRITE_SHORT(SECCON0, w | SECIGNORE);
+		SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+	}
+}
+
+int
+mrf24j40_check_rx_dec(int no_err_flush)
+{
+	int err;
+
+	err = (SPI_READ_SHORT(RXSR) & SECDECERR) ? EIO : 0;
+
+	if (err && !no_err_flush)
+		SPI_WRITE_SHORT(RXFLUSH, _RXFLUSH);
+
+	return err;
 }
 
 int
@@ -495,7 +597,28 @@ mrf24j40_rxpkt_part_intcb(unsigned char *d, int len, int flags,
 }
 
 int
-mrf24j40_int_tasks(void) {
+mrf24j40_check_enc(void)
+{
+	return mrf24j40_txpkt_intcb();
+}
+
+int
+mrf24j40_check_dec(void)
+{
+	unsigned char w;
+	int error;
+
+	if ((error = mrf24j40_txpkt_intcb()) != 0)
+		return error;
+		/* NOT REACHED */
+
+	w = SPI_READ_SHORT(RXSR);
+	return (w & UPSECERR) ? EIO : 0;
+}
+
+int
+mrf24j40_int_tasks(void)
+{
 	unsigned char stat;
 	int ret = 0;
 
@@ -508,7 +631,20 @@ mrf24j40_int_tasks(void) {
 	}
 
 	if (stat & TXNIF) {
-		ret |= MRF24J40_INT_TX;
+		switch (internal_state) {
+		MRF24J40_STATE_UPENC:
+			ret |= MRF24J40_INT_ENC;
+			internal_state = 0;
+			break;
+
+		MRF24J40_STATE_UPDEC:
+			ret |= MRF24J40_INT_DEC;
+			internal_state = 0;
+			break;
+
+		default:
+			ret |= MRF24J40_INT_TX;
+		}
 	}
 
 	if (stat & SECIF) {
@@ -517,3 +653,49 @@ mrf24j40_int_tasks(void) {
 
 	return ret;
 }
+
+/*
+ * NOTE: header length can be a maximum of 31 bytes due to a hardware
+ *	 limitation.
+ */
+void
+mrf24j40_encdec(unsigned char *nonce, int nonce_len, unsigned char *frame,
+    int hdr_len, int frame_len, int enc)
+{
+	int addr;
+
+	/* Upper layer encryption / decryption */
+	if (enc)
+		internal_state = MRF24J40_STATE_UPENC;
+	else
+		internal_state = MRF24J40_STATE_UPDEC;
+
+	/*
+	 * Load the 13-byte NONCE into UPNONCE...
+	 */
+	addr = UPNONCE0;
+	while (nonce_len-- > 0)
+		SPI_WRITE_LONG(addr++, *nonce++);
+
+	/*
+	 * Enable upper layer encryption UPENC in SECCR2.
+	 */
+	if (enc)
+		SPI_WRITE_SHORT(SECCR2, UPENC);
+	else
+		SPI_WRITE_SHORT(SECCR2, UPDEC);
+
+	/*
+	 * Encrypt frame by setting TXNTRIG and TXNSECEN
+	 */
+	mrf24j40_txpkt_raw(frame, hdr_len, frame_len, enc);
+
+	/*
+	 * TXNIF interrupt issued when encryption or decryption complete.
+	 * Check TXNSTAT for error; for decryption also check UPSECERR for
+	 * MIC (Message Integrity Check).
+	 *
+	 * TXNFIFO contains encrypted/decrypted frame.
+	 */
+}
+

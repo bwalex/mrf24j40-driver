@@ -25,10 +25,30 @@
 #define MRF24J40_INT_TX		0x02
 #define MRF24J40_INT_SEC	0x04
 #define MRF24J40_INT_SLP	0x08
+#define MRF24J40_INT_ENC	0x10
+#define MRF24J40_INT_DEC	0x20
 
 #define EIO			5
 #define ENOMEM			12
 #define EBUSY			16
+
+/* Internal state */
+#define MRF24J40_STATE_UPENC	0x01
+#define MRF24J40_STATE_UPDEC	0x02
+
+/* enc dec parameters */
+#define MRF24J40_TX_KEY		0x01
+#define MRF24J40_RX_KEY		0x02
+#define MRF24J40_UP_KEY		MRF24J40_TX_KEY
+
+#define MRF24J40_AES_CBC_MAC32	0x07
+#define MRF24J40_AES_CBC_MAC64	0x06
+#define MRF24J40_AES_CBC_MAC128	0x05
+#define MRF24J40_AES_CCM32	0x04
+#define MRF24J40_AES_CCM64	0x03
+#define MRF24J40_AES_CCM128	0x02
+#define MRF24J40_AES_CTR	0x01
+#define MRF24J40_ALGO_NONE	0x00
 
 /* Short Address Control Register Map */
 #define RXMCR		0x00
@@ -136,6 +156,8 @@
 #define TXG1FIFO	0x100 /* - 0x17F, 128 bytes */
 #define TXG2FIFO	0x180 /* - 0x1FF, 128 bytes */
 #define SECKFIFO	0x280 /* - 0x2BF, 64 bytes */
+#define SECKTXNFIFO	0x280 /* - 0x28F, 16 bytes */
+#define SECKRXFIFO	0x2B0 /* - 0x2BF, 16 bytes */
 #define RXFIFO		0x300 /* - 0x38F, 128 bytes */
 
 
@@ -311,15 +333,25 @@ void mrf24j40_set_pan(int pan);
 void mrf24j40_set_channel(int ch);
 void mrf24j40_set_promiscuous(int crc_check);
 void mrf24j40_set_coordinator(void);
-void mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len);
-void mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int len);
-unsigned char mrf24j40_read_channel(void);
+void mrf24j40_clear_coordinator(void);
+void mrf24j40_txpkt_trigger(void);
+void mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len,
+    int enc);
+void mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int len, int enc);
+unsigned char mrf24j40_get_channel(void);
 int mrf24j40_int_tasks(void);
 int mrf24j40_rxpkt_intcb(unsigned char *d, int len, unsigned char *plqi,
     unsigned char *prssi);
 int mrf24j40_rxpkt_part_intcb(unsigned char *d, int len, int flags,
-	unsigned char *plqi, unsigned char *prssi);
+    unsigned char *plqi, unsigned char *prssi);
 int mrf24j40_txpkt_intcb(void);
+int mrf24j40_sec_intcb(int accept);
+int mrf24j40_check_rx_dec(int no_err_flush);
+int mrf24j40_check_enc(void);
+int mrf24j40_check_dec(void);
+void mrf24j40_set_encdec(int types, int mode, unsigned char *key, int klen);
+void mrf24j40_encdec(unsigned char *nonce, int nonce_len, unsigned char *frame,
+    int hdr_len, int frame_len, int enc);
 
 
 /*
