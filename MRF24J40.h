@@ -36,6 +36,10 @@
 #define MRF24J40_STATE_UPENC	0x01
 #define MRF24J40_STATE_UPDEC	0x02
 
+/* Partial reception flags */
+#define MRF24J40_PART_RX_ABORT	(1 << 1)
+#define MRF24J40_PART_RX_FIRST	(1)
+
 /* enc dec parameters */
 #define MRF24J40_TX_KEY		0x01
 #define MRF24J40_RX_KEY		0x02
@@ -319,10 +323,6 @@
 #define CLKOUTDIS	(1 << 5)	/* CLKOUTEN' */
 #define SLPCLKDIV(x)	((x & 0x1F))	/* division ratio: 2^(SLPCLKDIV) */
 
-
-/* Partial reception flags */
-#define MRF24J40_PART_RX_ABORT	(1 << 1)
-#define MRF24J40_PART_RX_FIRST	(1)
 
 void mrf24j40_rxfifo_flush(void);
 void mrf24j40_init(int ch);
