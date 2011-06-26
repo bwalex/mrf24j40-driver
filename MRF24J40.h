@@ -310,6 +310,7 @@ void mrf24j40_set_short_addr(int addr);
 void mrf24j40_set_pan(int pan);
 void mrf24j40_set_channel(int ch);
 void mrf24j40_set_promiscuous(int crc_check);
+void mrf24j40_set_coordinator(void);
 void mrf24j40_txpkt_raw(unsigned char *frame, int hdr_len, int frame_len);
 void mrf24j40_txpkt(unsigned short dest, unsigned char *pkt, int len);
 unsigned char mrf24j40_read_channel(void);

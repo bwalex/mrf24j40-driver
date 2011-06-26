@@ -194,6 +194,12 @@ mrf24j40_set_promiscuous(int crc_check)
 }
 
 void
+mrf24j40_set_coordinator(void)
+{
+	SPI_WRITE_SHORT(RXMCR, SPI_READ_SHORT(RXMCR) | PANCOORD);
+}
+
+void
 mrf24j40_set_pan(int pan)
 {
 	SPI_WRITE_SHORT(PANIDH, pan>>8);
