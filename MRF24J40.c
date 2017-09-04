@@ -632,11 +632,6 @@ mrf24j40_int_tasks(void)
 
 	if (stat & TXNIF) {
 		switch (internal_state) {
-		MRF24J40_STATE_UPENC:
-			ret |= MRF24J40_INT_ENC;
-			internal_state = 0;
-			break;
-
 		MRF24J40_STATE_UPDEC:
 			ret |= MRF24J40_INT_DEC;
 			internal_state = 0;

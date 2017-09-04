@@ -34,7 +34,7 @@ void spi_write(unsigned char v)
 		SSPCON1bits.WCOL = 0;
 		SSPBUF = v;
 	} while( SSPCON1bits.WCOL );
-    
+
 	while( PIR1bits.SSPIF == 0 );
 }
 
